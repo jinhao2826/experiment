@@ -58,7 +58,9 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 		if(iph->daddr == redirect_networkip && ntohs(tcph->dest) == 9877 && tcph->res1 == 0xf)
 		{
 			
-			//printk(KERN_INFO "1#tail room:%u skb_len:%u skb->tail:%0x\n", skb->end - skb->tail, skb->len, skb->tail);
+			//printk(KERN_INFO "user data:%0x skb_len:%u skb->data:%p skb->tail:%p\n", (unsigned char *)skb->tail - (unsigned char *)skb->data, skb->len, (unsigned char *)skb->data, (unsigned char *)skb->tail);
+			printk(KERN_INFO "Before:len:%0x tailroom:%0x head:%0x data:%0x tail:%0x end:%0x\n", skb->len,skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end);
+			
 			spin_lock(&mylock);
 			if ((p = kmalloc(sizeof(struct securecode), GFP_KERNEL)) != NULL){
 				memcpy(p->code, (skb->data + skb->len - 40), 40);
@@ -79,6 +81,10 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 			spin_unlock(&mylock);
 
 			skb_trim(skb, skb->len - 40);
+
+			 printk(KERN_INFO "After: len:%u tailroom:%0x head:%0x data:%0x tail:%0x end:%0x\n", skb->len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end);
+
+			
 			//printk(KERN_INFO "2#tail room:%u skb_len:%u\n", skb->end - skb->tail, skb->len);
 
 			iph->tot_len = iph->tot_len - htons(40);
@@ -131,7 +137,7 @@ unsigned int hook_func2(unsigned int hooknum, struct sk_buff *skb, const struct 
 			
 			spin_lock(&mylock);
 			p = header; 
-			while((p != NULL) && (skb->end - skb->tail) >= 40){		
+			while((p != NULL) && (skb->end - skb->tail) >= 40 && count < 0xf){		
 					temp = p;
 					secure = skb_put(skb, 40);
 					printk(KERN_INFO "add %s in ACK <%u>\n", p->code, count);
@@ -196,7 +202,7 @@ int init_module()
 void cleanup_module()
 {
   	nf_unregister_hook(&nfho);   
-	nf_unregister_hook(&nfho2);                
+//	nf_unregister_hook(&nfho2);                
 }
 
 
