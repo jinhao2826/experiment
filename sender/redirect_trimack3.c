@@ -97,7 +97,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 		
 		tcplen = skb->len - ip_hdrlen(skb);
 	
-		if(iph->daddr == middlebox_networkip && ntohs(tcph->dest) == 9877)
+		if(iph->daddr == middlebox_networkip && ntohs(tcph->dest) == 9877 && !tcph->fin)
 		{
 		//	printk(KERN_INFO "tcph->psh:%0x\n", tcph->psh);
 		
@@ -161,7 +161,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 				
 			if(jiffies <= (temp->TA + sendperiod) && temp->PID <= capability_sum){
 				//skb->tail = skb->data + skb->len;
-				//printk(KERN_INFO "INSERT====>Before:Insert %u capability at %lu len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x\n", temp->PID, jiffies, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end);
+				printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
 				if(skb->end - skb->tail < 40) return NF_ACCEPT;
 				tcph->res1 = 0xf;
 				//skb->tail = skb->data + skb->len;
@@ -177,10 +177,10 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 				//printk(KERN_INFO "capability:%s\n", (char *)cap);
 				
 				memcpy(secure, (char *)cap, 40);
-				//printk(KERN_INFO "after insert: len:%u data len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x\n", skb->len, skb->data_len, skb->end-skb->tail, skb->head, skb->data, skb->tail, skb->end);
 				iph->tot_len = iph->tot_len + htons(40);
-				//printk(KERN_INFO "2#tail room:%u skb_len:%u\n", skb->end - skb->tail, skb->len);
-			
+				//iph->tot_len = skb->len;
+				printk(KERN_INFO "After INSERT===> len:%u data len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", skb->len, skb->data_len, skb->end-skb->tail, skb->head, skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
+	
 
 				tcplen = skb->len - ip_hdrlen(skb);
 				
