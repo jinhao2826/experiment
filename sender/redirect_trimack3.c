@@ -11,6 +11,22 @@ static struct nf_hook_ops nfho;
 
 static struct nf_hook_ops nfho2;
 
+struct ctableitem{
+		unsigned int saddr;
+		unsigned int id;
+		char code[36];
+
+};
+
+struct ctable{
+	struct ctableitem item[10];  	/*ctable contains 10 items*/
+	unsigned int n;					/*have inserted capabilities */
+	unsigned long start;			/* begin to time*/
+	unsigned long stop;				/*stop timing*/
+	unsigned int m;					/*have received capabilities*/
+};
+
+
 struct iTable{
 	unsigned int f; 	/*f records clients Source ip address */
 	unsigned long TA; 	/*TA records the start time of current detection period*/
@@ -20,6 +36,7 @@ struct iTable{
 	unsigned int WR;	/*maximum number of privileged packets allowed for client*/
 	char WV[32];		/*designed to learn remote packet losses*/
 	unsigned long LR;	/*historical LLR for source*/
+	unsigned int i;		/*received capability number*/
 	struct iTable *next;
 };
 
@@ -29,7 +46,6 @@ struct capability{
 
 };
 
-unsigned int i = 0;
 
 unsigned int sendperiod = 750;  //three seconds interval
 unsigned int interval = 1000;
@@ -37,6 +53,87 @@ unsigned int interval = 1000;
 struct iTable *iTable_header = NULL;
 struct iTable *iTable_tail = NULL;
 unsigned int capability_sum = 127;
+
+struct ctable c;
+struct ctable *ctab = &c;
+unsigned int loadctable = 0;
+
+
+void initialctable(struct ctable *p){
+	p->n = 0;
+	p->start = 0;
+	p->stop = 0;
+	p->m = 0;
+
+}
+
+
+unsigned int insertctable(struct ctable *p, unsigned int saddr, unsigned int id, char * code){
+			unsigned int j = p->n;
+			if(j <= 9){
+				p->item[j].saddr = saddr;
+				p->item[j].id = id;
+				memcpy(p->item[j].code, code, 36);
+				(p->n)++;
+				printk(KERN_INFO "Ctab insert %u capabilities in Ctab <NO. %u>\n", id, p->n);
+				return p->n;
+				
+			}else{
+				return 0;
+			}
+}
+
+
+
+void beginToTime(struct ctable *p){
+		p->start = jiffies;
+		p->stop = jiffies + 250;
+
+}
+
+
+unsigned int CtableContainCapability(struct ctable *p, unsigned int saddr, unsigned int id, char * code){
+		unsigned int i = 0;
+		while(i < p->n ){
+				if( (p->item[i].saddr == saddr) && (p->item[i].id == id)){
+					break;
+				}
+				i++;
+
+		}		
+		if(i < p->n) {
+
+			return 1;
+			
+		}else {
+
+			return 0;
+		}
+}
+
+
+void checkgetcapability(struct ctable *p, unsigned int saddr, unsigned int id, char * code){
+	
+		if(jiffies <= p->stop){
+
+			if (CtableContainCapability(p, saddr, id, code)){
+				(p->m)++;
+				printk(KERN_INFO "Ctab check id %u capabilities <Total checked %u>\n", id, p->m);				
+			}
+
+		}else{
+
+			/*calculate the drop rate*/
+			if(loadctable != 0 && p->n == 10){
+				printk(KERN_INFO "Ctable###send %u capabilities receive %u capabilities in one second period.\n", p->n, p->m);
+				loadctable = 0;			
+			}
+
+		}
+
+}
+
+
 
 
 struct iTable *searchiTable( unsigned int addr){
@@ -85,6 +182,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 
 	struct iTable *temp = NULL;
 	
+	unsigned int count;	
 
 	iph = ip_hdr(skb);
 
@@ -105,7 +203,13 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 
 			/*add extra 40 bytes in tcp payload*/
 			//printk(KERN_INFO "1#tail room:%u skb_len:%u\n", skb->end - skb->tail, skb->len);
+			spin_lock(&mylock);
+			if(loadctable == 0){
 
+				initialctable(ctab);
+				loadctable = 1;
+			}
+			spin_unlock(&mylock);
 			temp = searchiTable(iph->saddr);
 			//printk(KERN_INFO "temp point is %x\n", temp);
 				
@@ -141,7 +245,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 			if ((jiffies - temp->TA) > interval){   		//new interval begin
 
 				//calcuate last interval drop rate and other information
-				printk(KERN_INFO "###Last interval send %u capability get %u capability\n", temp->PID, i);
+				printk(KERN_INFO "iTable:###Last interval send %u capability get %u capability\n", temp->PID, temp->i);
 
 				//Reset
 				temp->TA = jiffies;
@@ -152,7 +256,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 				memset(temp->WV, 0, 32);
 				temp->LR = 0;	
 
-				i = 0;
+				temp->i = 0;
 				
 			} 
 
@@ -161,7 +265,7 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 				
 			if(jiffies <= (temp->TA + sendperiod) && temp->PID <= capability_sum){
 				//skb->tail = skb->data + skb->len;
-				printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
+				//printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
 				if(skb->end - skb->tail < 40) return NF_ACCEPT;
 				tcph->res1 = 0xf;
 				//skb->tail = skb->data + skb->len;
@@ -177,9 +281,17 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 				//printk(KERN_INFO "capability:%s\n", (char *)cap);
 				
 				memcpy(secure, (char *)cap, 40);
+				
+				spin_lock(&mylock);
+				count = insertctable(ctab, iph->saddr, temp->PID , encryptioncode);
+
+				if(count == 1) beginToTime(ctab);
+				spin_unlock(&mylock);
+
+				
 				iph->tot_len = iph->tot_len + htons(40);
 				//iph->tot_len = skb->len;
-				printk(KERN_INFO "After INSERT===> len:%u data len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", skb->len, skb->data_len, skb->end-skb->tail, skb->head, skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
+				//printk(KERN_INFO "After INSERT===> len:%u data len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", skb->len, skb->data_len, skb->end-skb->tail, skb->head, skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
 	
 
 				tcplen = skb->len - ip_hdrlen(skb);
@@ -240,7 +352,7 @@ unsigned int hook_func2(unsigned int hooknum, struct sk_buff *skb, const struct 
 			temp2 = searchiTable(iph->daddr);
 			//printk(KERN_INFO "GETCapability Process===>temp2:%x\n", temp2);			
 			
-			if((temp2 != NULL) && jiffies <= (temp2->TA + interval) && i <= capability_sum){
+			if((temp2 != NULL) && jiffies <= (temp2->TA + interval) && temp2->i <= capability_sum){
 				res1 = tcph->res1;
 				//printk(KERN_INFO "GETCAPABILITY===>Before:len:%0x tailroom:%0x head:%0x data:%0x tail:%0x end:%0x data_len:%0x res1:%u\n", skb->len,skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, skb->data_len, res1);
 				
@@ -249,9 +361,12 @@ unsigned int hook_func2(unsigned int hooknum, struct sk_buff *skb, const struct 
 					memcpy(getcapability, (skb->data + skb->len - res1*40), 40);
 					//memcpy(id, (skb->data + skb->len - res1*40), 4);
 					cap2 = (struct capability *)getcapability;
-                			printk(KERN_INFO "get capability id=%u code=%s <res1:%u>\n", cap2->num, cap2->code, res1);
+                			printk(KERN_INFO "get capability id=%u code=%s <res1:%u>\n", cap2->num, cap2->code, res1);				
+					spin_lock(&mylock);
+					checkgetcapability(ctab, iph->daddr, cap2->num, cap2->code);								  spin_unlock(&mylock);
+					
 					res1--;
-					i++;
+					(temp2->i)++;
 					//skb_trim(skb, skb->len - 40);
 				}
 				
