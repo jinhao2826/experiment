@@ -274,8 +274,8 @@ unsigned int hook_func(unsigned int hooknum, struct sk_buff *skb, const struct n
 			if(jiffies <= (temp->TA + sendperiod) && temp->PID <= capability_sum){
 
 				//printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
-				if((skb->len != mtu)||(skb->end - skb->tail < capability_room)) return NF_ACCEPT;
-				
+				//if((skb->len != mtu)||(skb->end - skb->tail < capability_room)) return NF_ACCEPT;
+				if((skb->end - skb->tail < capability_room)) return NF_ACCEPT;
 			
 				temp->PID++;
 				
