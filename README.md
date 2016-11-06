@@ -124,7 +124,6 @@ sudo ip route add 10.20.101.0/24 dev eth0 advmss 1300
 3. run receive in victiom
 
 4. Compile with "gcc -fopenmp -o GenTraffic GenTraffic.c -lm -lpthread" to get send tool. 
-
 Certainly, you can modify source code to control how many data this tool send.
 
 5. Record log information is in /var/log/syslog
