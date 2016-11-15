@@ -1110,10 +1110,10 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
      *	1. Simply change the daddr to redirect the packet 
      *	2. The capability related handling is loaded to the POST_ROUTING hook
      */
-    else if (redirect_enabled && iph->daddr == mbox_networkip && ntohs(tcph->dest) == 9877 && iph->protocol == IPPROTO_TCP) {
+    else if (redirect_enabled && iph->daddr == mbox_networkip && iph->protocol == IPPROTO_TCP) {
 	tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
 	tcplen = skb->len - ip_hdrlen(skb);
-
+	if(ntohs(tcph->dest) == 9877){
 	// redirect the traffic to the victim
 	iph->daddr = victim_networkip; 
 
@@ -1122,7 +1122,7 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
 	tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
 	skb->ip_summed = CHECKSUM_NONE;
 	ip_send_check(iph);
-    
+    	}
     }
 
     return NF_ACCEPT;                                                              
