@@ -1117,6 +1117,7 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
 	tcph = (struct tcphdr *)((__u32 *)iph+ iph->ihl);
 	tcplen = skb->len - ip_hdrlen(skb);
 	if(ntohs(tcph->dest) == 9877){
+        spin_lock_irq(&mylock);
 	// redirect the traffic to the victim
 	iph->daddr = victim_networkip; 
 
@@ -1125,6 +1126,7 @@ unsigned int hook_func_in(unsigned int hooknum, struct sk_buff *skb, const struc
 	tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
 	skb->ip_summed = CHECKSUM_NONE;
 	ip_send_check(iph);
+        spin_unlock_irq(&mylock);
     	}
     }
 
@@ -1336,15 +1338,15 @@ unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, const stru
 	
 	    // Capability Handling
 	    if(jiffies <= (temp->TA + detection_period - Th_rtt) && temp->PID < Th_cap){
-
+		//If data_len is not 0, need sk_buff linerize.  zero is returned and the old skb data released.	
+		skb_linearize(skb); 		
 		printk(KERN_INFO "INSERT====>Before:Insert %u capability len:%0x data_len:%u tailroom:%u head:%0x data:%0x tail:%0x end:%0x iplen:%x\n", temp->PID, skb->len, skb->data_len, skb->end-skb->tail, skb->head,skb->data, skb->tail, skb->end, ntohs(iph->tot_len));
 		if((skb->end - skb->tail < capability_len)) return NF_ACCEPT;
-
+		
 		temp->PID++;
 
-		/*
-		 * For simplicity of debugging, we simulate the capabilty computation by calling the CBC function
-		 */
+		
+		//For simplicity of debugging, we simulate the capabilty computation by calling the CBC function
 		cap->id = temp->PID;
 		cap->saddr = iph->saddr;
 		cap->timestamp = jiffies;
@@ -1446,6 +1448,7 @@ unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, const stru
 	tcph = (struct tcphdr *)((__u32 *)iph + iph->ihl);
 	
 	if (ntohs(tcph->source) == 9877 && tcph->ack) {
+	    spin_lock_irq(&mylock);
 	    iph->saddr = mbox_networkip;
 
 	    // recompute checksum
@@ -1454,6 +1457,7 @@ unsigned int hook_func_out(unsigned int hooknum, struct sk_buff *skb, const stru
 	    tcph->check = tcp_v4_check(tcplen, iph->saddr, iph->daddr, csum_partial(tcph, tcplen, 0));
 	    skb->ip_summed = CHECKSUM_NONE;
 	    ip_send_check(iph);
+	    spin_unlock_irq(&mylock);
 	}
 
     }
