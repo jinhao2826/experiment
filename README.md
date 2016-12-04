@@ -14,4 +14,4 @@ Limitation:
 ABOUT KVM VIRTUAL MACHINE
 
 I have try on KVM Virtual machines. We meet some problem in Virtual Machines.
-The main problems is we can not get the linear sk_buff. This problem is probably caused by TSO and GSO in my opinion.
+The main problems is we can not get the linear sk_buff. This problem is probably caused by TSO GSO and GRO in my opinion.
